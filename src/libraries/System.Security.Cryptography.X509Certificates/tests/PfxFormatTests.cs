@@ -192,6 +192,14 @@ namespace System.Security.Cryptography.X509Certificates.Tests
                 ReadPfx(pfxBytes, string.Empty, cert);
             }
         }
+        
+        [Fact]
+        public void OneCert_Gost_EncryptedWithPassword()
+        {
+            using(var cert = new X509Certificate2(TestData.Gost256PfxWithPassword, "test"))
+            {
+            }
+        }
 
         [Theory]
         [InlineData(false, false)]

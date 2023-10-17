@@ -27,6 +27,7 @@ namespace Internal.Cryptography.Pal
         private int _certCount;
         private PointerMemoryManager<byte>? _tmpManager;
         private bool _allowDoubleBind;
+        public bool RequireNative { get; private set; }
 
         protected abstract ICertificatePalCore ReadX509Der(ReadOnlyMemory<byte> data);
         protected abstract AsymmetricAlgorithm LoadKey(ReadOnlyMemory<byte> safeBagBagValue);
@@ -458,11 +459,11 @@ namespace Internal.Cryptography.Pal
                 try
                 {
                     SafeBagAsn keyBag = keyBags[i];
-                    AsymmetricAlgorithm key = LoadKey(keyBag, password);
+                    AsymmetricAlgorithm? key = LoadKey(keyBag, password);
 
-                    int pubLength;
+                    int pubLength = 0;
 
-                    while (!key.TryExportSubjectPublicKeyInfo(spkiBuf, out pubLength))
+                    while (key != null && !key.TryExportSubjectPublicKeyInfo(spkiBuf, out pubLength))
                     {
                         byte[]? toReturn = spkiBuf;
                         spkiBuf = CryptoPool.Rent((toReturn?.Length ?? 128) * 2);
@@ -478,7 +479,10 @@ namespace Internal.Cryptography.Pal
                         spkiBuf.AsMemory(0, pubLength),
                         AsnEncodingRules.DER);
 
-                    keys[i] = key;
+                    if (key != null)
+                    {
+                        keys[i] = key;
+                    }
                     cur.TrackArray(spkiBuf, clearSize: 0);
                     spkiBuf = null;
                 }
@@ -766,7 +770,7 @@ namespace Internal.Cryptography.Pal
             }
         }
 
-        private AsymmetricAlgorithm LoadKey(SafeBagAsn safeBag, ReadOnlySpan<char> password)
+        private AsymmetricAlgorithm? LoadKey(SafeBagAsn safeBag, ReadOnlySpan<char> password)
         {
             if (safeBag.BagId == Oids.Pkcs12ShroudedKeyBag)
             {
@@ -774,6 +778,11 @@ namespace Internal.Cryptography.Pal
                     password,
                     safeBag.BagValue,
                     out int localRead);
+                if (localRead == -1)
+                {
+                    this.RequireNative = true;
+                    return null;
+                }
 
                 try
                 {

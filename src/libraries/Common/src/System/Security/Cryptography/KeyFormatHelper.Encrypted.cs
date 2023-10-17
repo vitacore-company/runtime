@@ -303,6 +303,11 @@ namespace System.Security.Cryptography
                     inputPasswordBytes,
                     epki.EncryptedData.Span,
                     decrypted);
+                if (decryptedBytes == -1)
+                {
+                    bytesRead = decryptedBytes;
+                    return new ArraySegment<byte>() { };
+                }
 
                 bytesRead = localRead;
 

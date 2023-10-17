@@ -151,5 +151,8 @@ namespace System.Security.Cryptography
         internal const string secp256r1 = "1.2.840.10045.3.1.7";
         internal const string secp384r1 = "1.3.132.0.34";
         internal const string secp521r1 = "1.3.132.0.35";
+
+        // Gost encodings
+        internal const string CryptoProExportEncoding = "1.2.840.113549.1.12.1.80";
     }
 }

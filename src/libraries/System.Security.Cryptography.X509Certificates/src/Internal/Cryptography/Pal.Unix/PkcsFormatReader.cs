@@ -318,7 +318,13 @@ namespace Internal.Cryptography.Pal
 
             using (pfx)
             {
-                return TryReadPkcs12(rawData, pfx, password, single, ephemeralSpecified, readingFromFile, out readPal, out readCerts);
+                bool result = TryReadPkcs12(rawData, pfx, password, single, ephemeralSpecified, readingFromFile, out readPal, out readCerts, out bool useNative);
+                if (!result && useNative)
+                {
+                    CertificatePal.FromBlobOrFile(rawData, null, password, X509KeyStorageFlags.DefaultKeySet);
+                    result = true;
+                }
+                return result;
             }
         }
 
@@ -330,10 +336,18 @@ namespace Internal.Cryptography.Pal
             bool ephemeralSpecified,
             bool readingFromFile,
             out ICertificatePal? readPal,
-            out List<ICertificatePal>? readCerts)
+            out List<ICertificatePal>? readCerts,
+            out bool useNative)
         {
             X509Certificate.EnforceIterationCountLimit(rawData, readingFromFile, password.PasswordProvided);
             pfx.Decrypt(password, ephemeralSpecified);
+            if (pfx.RequireNative)
+            {
+                readPal = null;
+                readCerts = null;
+                useNative = true;
+                return false;
+            }
 
             if (single)
             {
@@ -347,6 +361,7 @@ namespace Internal.Cryptography.Pal
 
                 readPal = pal;
                 readCerts = null;
+                useNative = false;
                 return true;
             }
 
@@ -366,6 +381,7 @@ namespace Internal.Cryptography.Pal
             }
 
             readCerts = certs;
+            useNative = false;
             return true;
         }
     }
