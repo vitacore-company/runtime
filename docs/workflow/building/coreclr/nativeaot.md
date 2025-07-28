@@ -1,118 +1,115 @@
-# Native AOT Developer Workflow
+# Работа с Native AOT
 
-* [Building](#building)
-  * [Using built binaries](#using-built-binaries)
-  * [Building packages](#building-packages)
-* [High Level Overview](#high-level-overview)
-* [Visual Studio Solutions](#visual-studio-solutions)
-* [Convenience Visual Studio "repro" project](#convenience-visual-studio-repro-project)
-* [Running tests](#running-tests)
-  * [Running library tests](#running-library-tests)
-* [Design Documentation](#design-documentation)
-* [Further Reading](#further-reading)
+На данный момент набор инструментов Native AOT может быть собран на Linux (x64/arm64), macOS (x64) и Windows (x64/arm64).
 
-The Native AOT toolchain can be currently built for Linux (x64/arm64), macOS (x64) and Windows (x64/arm64).
+## Сборка
 
-## Building
+1. [Установите предварительные требования](../README.md#build-requirements).
+2. Запустите `build[.cmd|.sh] clr.aot+libs -rc [Debug|Release]` из корневой папки репозитория, чтобы собрать бинарные файлы для локальной разработки. Эта команда соберет отдельные компоненты (но не соберет NuGet-пакеты).
 
-1. [Install pre-requisites](/docs/workflow/README.md#build-requirements)
-1. Run `build[.cmd|.sh] clr.aot+libs -rc [Debug|Release]` from the repo root to build binaries for local development. This will build individual components, but not the NuGet packages and builds much faster.
+### Работа с бинарными файлами
 
-### Using built binaries
+Пути к основным компонентам можно изменить с помощью свойств `IlcToolsPath`, `IlcSdkPath`, `IlcFrameworkPath`, `IlcFrameworkNativePath` и `IlcMibcPath` для `dotnet publish`. Например, команду
 
-The paths to major components can be overridden using `IlcToolsPath`, `IlcSdkPath`, `IlcFrameworkPath`, `IlcFrameworkNativePath` and `IlcMibcPath` properties for `dotnet publish`. For example, `/p:IlcToolsPath=<repo root>\artifacts\bin\coreclr\windows.x64.Debug\ilc` can be used to override the compiler with a local debug build for troubleshooting or quick iterations.
+```
+/p:IlcToolsPath=<repo root>\artifacts\bin\coreclr\windows.x64.Debug\ilc
+```
 
-### Building packages
+можно использовать для перезаписи компилятора с помощью локальной отладочной сборки для устранения неполадок или быстрого итерационного процесса.
 
-Run `build[.cmd|.sh] -c Release` from the repo root to build the NativeAOT toolchain packages. The build will place the toolchain packages at `artifacts\packages\Release\Shipping`. To publish your project using these packages:
+### Сборка пакетов
 
-* Add the package directory to your `nuget.config` file. For example, add `<add key="local" value="C:\runtime\artifacts\packages\Release\Shipping" />`
-* Run `dotnet add package Microsoft.DotNet.ILCompiler -v 10.0.0-dev` to add the local package reference to your project.
-* Run `dotnet publish --packages pkg -r [win-x64|linux-x64|osx-64] -c [Debug|Release]` to publish your project. `--packages pkg` option restores the package into a local directory that is easy to cleanup once you are done. It avoids polluting the global nuget cache with your locally built dev package.
+Запустите скрипт `build[.cmd|.sh] -c Release` из из корневой папки репозитория, чтобы собрать пакеты инструментальной цепочки NativeAOT. Операция сборки поместит пакеты инструментария в папку `artifacts\packages\Release\Shipping`. Для публикации проекта с помощью этих пакетов::
 
-## High Level Overview
+1. Добавьте каталог пакетов в файл `nuget.config`. Например: `<add key="local" value="C:\runtime\artifacts\packages\Release\Shipping" />`
+2. Запустите `dotnet add package Microsoft.DotNet.ILCompiler -v 10.0.0-dev` чтобы добавить локальную ссылку на пакеты в ваш проект.
+3. Запустите `dotnet publish --packages pkg -r [win-x64|linux-x64|osx-64] -c [Debug|Release]`, чтобы опубликовать ваш проект. Опция `--packages pkg` восстанавливает пакет в локальный каталог, который легко очистить после завершения работы. Что также позволяет избежать загрязнения глобального кэша nuget вашими локально собранным пакетами.
 
-Native AOT is a stripped down version of the CoreCLR runtime specialized for ahead of time compilation, with an accompanying ahead of time compiler.
+## Верхнеуровневое описание Native AOT
 
-The main components of the toolchain are:
+Native AOT — это упрощенная версия CoreCLR runtime, которая специализируется на компиляции ahead-of-time, с сопутствующим AOT-компилятором.
 
-* The AOT compiler (ILC/ILCompiler) built on a shared codebase with crossgen2 (src/coreclr/tools/aot). Where crossgen2 generates ReadyToRun modules that contain code and data structures for the CoreCLR runtime, ILC generates code and self-describing datastructures for a stripped down version of CoreCLR into object files. The object files use platform specific file formats (COFF with CodeView on Windows, ELF with DWARF on Linux, and Mach-O with DWARF on macOS).
-* The stripped down CoreCLR runtime (NativeAOT specific files in src/coreclr/nativeaot/Runtime, the rest included from the src/coreclr). The stripped down runtime is built into a static library that is linked with object file generated by the AOT compiler using a platform-specific linker (link.exe on Windows, ld on Linux/macOS) to form a standalone executable.
-* The bootstrapper library (src/coreclr/nativeaot/Bootstrap). This is a small native library that contains the actual native `main()` entrypoint and bootstraps the runtime and dispatches to managed code. Two flavors of the bootstrapper are built - one for executables, and another for dynamic libraries.
-* The core libraries (src/coreclr/nativeaot): System.Private.CoreLib (corelib), System.Private.Reflection.* (the implementation of reflection), System.Private.TypeLoader (ability to load new types that were not generated statically).
-* The dotnet integration (src/coreclr/nativeaot/BuildIntegration). This is a set of .targets/.props files that hook into `dotnet publish` to run the AOT compiler and execute the platform linker.
+Основные компоненты инструментария включают в себя:
 
-The AOT compiler typically takes the app, core libraries, and framework libraries as input. It then compiles the whole program into a single object file. Then the object file is linked to form a runnable executable. The executable is standalone (doesn't require a runtime), modulo any managed DllImports.
+-   AOT-компилятор (ILC/ILCompiler) собран на общей кодовой базе с crossgen2 (src/coreclr/tools/aot). Crossgen2 генерирует модули ReadyToRun, которые содержат код и структуры данных для CoreCLR. ILC генерирует код и структуры данных для упрощенной версии CoreCLR в файлы объектов. Эти файлы используют специальные форматы для каждой системы: COFF и CodeView для Windows, ELF и DWARF для Linux, Mach-0 и DWARF для macOS.
+-   Упрощенный CoreCLR runtime. Файлы NativeAOT находятся в папке `src/coreclr/nativeaot/Runtime`, остальные в `src/coreclr`. Этот упрощенный собирается в статическую библиотеку, которая связывается с объектным файлом. Этот файл генерируется AOT-компилятором с использованием специального компоновщика (`link.exe` на Windows, `ld` на Linux/macOS), чтобы сформировать самостоятельный исполняемый файл.
+-   Библиотека Bootstrap (`src/coreclr/nativeaot/Bootstrap`). Это небольшая нативная библиотека, которая содержит фактическую нативную точку входа `main()`, инициализирует runtime, а также оперирует управляемым кодом. Строится два варианта бутстраппера — один для исполняемых файлов и другой для динамических библиотек.
+-   Основные библиотеки (`src/coreclr/nativeaot`): System.Private.CoreLib (corelib), System.Private.Reflection.\* (имплементация reflection) и System.Private.TypeLoader (возможность загружать новые типы, которые не были сгенерированы статически).
+-   Интеграция dotnet (`src/coreclr/nativeaot/BuildIntegration`). Представляет из себя набор файлов .targets/.props, которые подключаются к `dotnet publish`, чтобы запустить AOT-компилятор и компоновщик платформы.
 
-The executable looks like a native executable, in the sense that it can be debugged with native debuggers and have full-fidelity access to locals, and stepping information.
+AOT-компилятор принимает приложение, основные библиотеки и библиотеки фреймворка в качестве входных данных. Затем он компилирует всю программу в один объектный файл. После этого привязывается объектный файл, чтобы сформировать исполняемый файл. Исполняемый файл работает самостоятельно (не требует runtime), за исключением любых управляемых DllImports.
 
-The compiler also has a mode where each managed assembly can be compiled into a separate object file. The object files are later linked into a single executable using the platform linker. This mode is mostly used in testing (it's faster to compile this way because we don't need to recompiling the same code from e.g. CoreLib). It's not a shipping configuration and has many problems (requires exactly matching compilation settings, forfeits many optimizations, and has trouble around cross-module generic virtual method implementations).
+Исполняемый файл представлен как нативный исполняемый, поскольку его можно дебажить с помощью нативных отладчиков, а также получить полный доступ к его локальным переменным и информации о пошаговом выполнении.
 
-## Visual Studio Solutions
+Компилятор также имеет режим, в котором каждая управляемая сборка может быть скомпилирована в отдельный объектный файл. Далее такие объектные файлы связываются в один исполняемый файл с использованием платформенного компоновщика. Этот режим в основном используется в тестировании, так как процесс сборки в таком режиме проходит быстрее из-за того, что не нужно повторно компилировать один и тот же код (напр. код из CoreLib). Не входит в конфигурацию поставки и имеет ряд проблем (требует точного совпадения настроек компиляции, несовместим с рядом оптимизаций и имеет проблемы с реализацией стандартных виртуальных методов между модулями).
 
-The repository has a number of Visual Studio Solutions files (`*.sln`) that are useful for editing parts of the repository. Build the repo from command line first before building using the solution files. Remember to select the appropriate configuration that you built. By default, `build.cmd` builds Debug x64 and so `Debug` and `x64` must be selected in the solution build configuration drop downs.
+## Решения Visual Studio
 
-Solutions related to this:
+В репозитории есть несколько решений Visual Studio (файлы в формате `*.sln`), которые могут быть использованы для редактирования репозитория. Прежде чем начать работу с файлами решений, нужно собрать репозиторий при помощи командной строки. Необходимо также использовать соответствующую конфигурацию, с которой вы собрали репозиторий. По умолчанию `build.cmd` работает с _Debug x64_, поэтому в выпадающих списках конфигурации сборки решения должны быть выбраны `Debug` и `x64`.
 
-* `src\coreclr\nativeaot\nativeaot.sln`. This solution is for the runtime libraries.
-* `src\coreclr\tools\aot\ilc.sln`. This solution is for the compiler.
+Решения включают в себя:
 
-Typical workflow for working on the compiler:
+-   `src\coreclr\nativeaot\nativeaot.sln`: Решение для библиотек runtime.
+-   `src\coreclr\tools\aot\ilc.sln`: Решение для компилятора.
 
-* Open `ilc.sln` in Visual Studio
-* Set "ILCompiler" project in solution explorer as your startup project
-* Set Working directory in the project Debug options to your test project directory, e.g. `C:\test`
-* Set Application arguments in the project Debug options to the response file that was generated by regular native aot publishing of your test project, e.g. `@obj\Release\net8.0\win-x64\native\HelloWorld.ilc.rsp`
-* Build & run using **F5**
+Ниже представлен типичный процесс работы с компилятором:
 
-## Convenience Visual Studio "repro" project
+1. Откройте `ilc.sln` в Visual Studio.
+2. Укажите проект _ILCompiler_ в обозревателе решений (solution explorer) в качестве вашего стартового проекта.
+3. В параметрах отладки (debug options) проекта укажите рабочую папку для тестового проекта (например, `C:\test`).
+4. В параметрах отладки проекта укажите аргументы приложения для файла ответа (response file), который был сгенерирован при обычной публикации native AOT вашего тестового проекта. Например: `@obj\Release\net8.0\win-x64\native\HelloWorld.ilc.rsp`
+5. Начните сборку и запустите проект с помощью **F5**
 
-Typical native AOT runtime developer scenario workflow is to native AOT compile a short piece of C# and run it. The repo contains helper projects that make debugging the AOT compiler and the runtime easier.
+## Проект "repro" в Visual Studio
 
-The workflow looks like this:
+Обычно для работы runtime и native AOT требуется скомпилировать небольшой код на C# и запустить его. Репозиторий содержит вспомогательные проекты, которые упрощают отладку AOT-компилятора и runtime.
 
-* Build the repo using the Building instructions above
-* Open the ilc.sln solution described above. This solution contains the compiler, but also an unrelated project named "repro". This repro project is a small Hello World. You can place any piece of C# you would like to compile in it. Building the project will compile the source code into IL, but also generate a response file that is suitable to pass to the AOT compiler.
-* Make sure you set the solution configuration in VS to the configuration you just built (e.g. x64 Debug).
-* In the ILCompiler project properties, on the Debug tab, set the "Application arguments" to `@$(ArtifactsBinDir)repro\$(TargetArchitecture)\$(Configuration)\compile-with-Release-libs.rsp`. The `@` at the front of the argument indicates that this is the path to the response file generated when "repro" was built. Adjust the "compile-with-Release-libs" part to "compile-with-Debug-libs" depending on how you built the libraries (the `-lc` argument to `build.cmd`). Visual Studio will expand the path to something like `@C:\runtime\artifacts\bin\repro\x64\Debug\compile-with-Release-libs.rsp`.
-* Build & run ILCompiler using **F5**. This will compile the repro project into an `.obj` file. You can debug the compiler and set breakpoints in it at this point.
-* The last step is linking the object file into an executable so that we can launch the result of the AOT compilation.
-* Open the src\coreclr\tools\aot\ILCompiler\reproNative\reproNative.vcxproj project in Visual Studio. This project is configured to pick up the `.obj` file we just compiled and link it with the rest of the runtime.
-* Set the solution configuration to the tuple you've been using so far (e.g. x64 Debug)
-* Build & run using **F5**. This will run the platform linker to link the obj file with the runtime and launch it. At this point you can debug the runtime and the various System.Private libraries.
+Рабочий процесс выглядит следующим образом:
 
-## Running tests
+1. Соберите репозиторий, используя инструкции по сборке выше.
+2. Откройте файл `ilc.sln`, который упомянут выше. Это решение содержит компилятор, а также несвязанный проект под названием "repro". Проект repro — это небольшой Hello World для компилятора. Поместите в него любой кусок кода на C#, который хотите скомпилировать. Проект скомпилирует исходный код в IL, а также сгенерирует файл ответа, который подходит для передачи AOT-компилятору.
+3. Убедитесь, что вы установили конфигурацию решения в VS на ту конфигурацию, которую вы только что собрали (напр. _x64 Debug_).
+4. Откройте свойства проекта ILCompiler и перейдите во вкладку _Debug_. Далее укажите в Application arguments: `@$(ArtifactsBinDir)repro\$(TargetArchitecture)\$(Configuration)\compile-with-Release-libs.rsp`. Символ `@` в начале аргумента указывает на то, что это путь к файлу ответа, который был сгенерирован при сборке "repro". Замените "_compile-with-Release-libs_" на "_compile-with-Debug-libs_" если собраны соответствующие библиотеки (аргумент `-lc` для `build.cmd`). Visual Studio расширит путь, например: `@C:\runtime\artifacts\bin\repro\x64\Debug\compile-with-Release-libs.rsp`.
+5. Соберите и запустите ILCompiler при помощи **F5**. Проект _repro_ скомпилируется в файл `.obj`. На этом этапе вы можете отлаживать компилятор и создавать точки прерывания (breakpoints).
+6. Далее необходимо связать файл `obj` с исполняемым файлом, чтобы запустить результат AOT-компиляции:
+    - Откройте проект `src\coreclr\tools\aot\ILCompiler\reproNative\reproNative.vcxproj` в Visual Studio. Этот проект предназначен для использования вашего скомпилированного файла `.obj` и связывания этого файла с runtime.
+    - Установите конфигурацию решения на ту пару, которую вы использовали ранее (например, _x64 Debug_).
+    - Запустите компиляцию при помощи **F5**. Этот процесс также запустит платформенный компоновщик для связывания файла `obj` с runtime, а также запустит сам runtime. На этом этапе можно отлаживать runtime и различные библиотеки `System.Private`.
 
-If you haven't built the tests yet, run `src\tests\build.cmd nativeaot [Debug|Release] tree nativeaot` on Windows, or `src/tests/build.sh -nativeaot [Debug|Release] -tree:nativeaot` on Linux. This will build the smoke tests only - they usually suffice to ensure the runtime and compiler is in a workable shape. To build all Pri-0 tests, drop the `tree nativeaot` parameter. The `Debug`/`Release` parameter should match the build configuration you used to build the runtime.
+## Запуск тестов
 
-To run all the tests that got built, run `src\tests\run.cmd runnativeaottests [Debug|Release]` on Windows, or `src/tests/run.sh --runnativeaottests [Debug|Release]` on Linux. The `Debug`/`Release` flag should match the flag that was passed to `build.cmd` in the previous step.
+Соберите тесты командой `src\tests\build.cmd nativeaot [Debug|Release] tree nativeaot` на Windows или `src/tests/build.sh -nativeaot [Debug|Release] -tree:nativeaot` на Linux. Эта команда соберет только smoke-тесты, так как их обычно хватает для проверки работоспособности компилятора и runtime. Чтобы собрать все тесты _Pri-0_, уберите из команды параметр `tree nativeaot`. Параметр `Debug/Release` должен соответствовать конфигурации сборки runtime.
 
-To build an individual test, follow the instructions for compiling a individual test project located in [Building an Individual Test](/docs/workflow/testing/coreclr/testing.md#building-an-individual-test), but add `/t:BuildNativeAot /p:TestBuildMode=nativeaot` to the build command.
+Чтобы запустить все собранные тесты, выполните команду `src\tests\run.cmd runnativeaottests [Debug|Release]` на Windows или `src/tests/run.sh --runnativeaottests [Debug|Release]` на Linux. Флаг `Debug/Release` должен соответствовать флагу, который был передан скрипту `build.cmd`.
 
-To run an individual test (after it was built), navigate to the `artifacts\tests\coreclr\[windows|linux|osx[.x64.[Debug|Release]\$path_to_test` directory. `$path_to_test` matches the subtree of `src\tests`. You should see a `[.cmd|.sh]` file there. This file is a script that will compile and launch the individual test for you. Before invoking the script, set the following environment variables:
+Чтобы собрать конкретный тест отдельно, следуйте инструкциям сборки отдельного теста в главе [Сборка и запуск тестов](../../../testing/coreclr/testing). Также к команде сборки нужно добавить `/t:BuildNativeAot /p:TestBuildMode=nativeaot`.
 
-* CORE_ROOT=$repo_root\artifacts\tests\coreclr\[windows|linux|osx].x64.[Debug|Release]\Tests\Core_Root
-* CLRCustomTestLauncher=$repo_root\src\tests\Common\scripts\nativeaottest[.cmd|.sh]
+Чтобы запустить отдельный тест (после его сборки), перейдите в папку `artifacts\tests\coreclr\[windows|linux|osx[.x64.[Debug|Release]\$path_to_test`. Здесь `$path_to_test` должен соответствовать древу `src\tests`. Тут также находится файл с расширением `[.cmd|.sh]`. Этот файл является скриптом, который скомпилирует и запустит выбранный тест. Перед вызовом скрипта установите следующие переменные окружения:
 
-`$repo_root` is the root of your clone of the repo.
+-   CORE_ROOT=$repo_root\artifacts\tests\coreclr\[windows|linux|osx].x64.[Debug|Release]\Tests\Core_Root
+-   CLRCustomTestLauncher=$repo_root\src\tests\Common\scripts\nativeaottest[.cmd|.sh]
 
-Sometimes it's handy to be able to rebuild the managed test manually or run the compilation under a debugger. A response file that was used to invoke the ahead of time compiler can be found in `$repo_root\artifacts\tests\coreclr\obj\[windows|linux|osx].x64.[Debug|Release]\Managed`.
+`$repo_root` — корневая папка вашего склонированного репозитория.
 
-For more advanced scenarios, look for at [Building the Tests](/docs/workflow/testing/coreclr/testing.md#building-the-tests) and [Building the Core_Root](../../testing/coreclr/testing.md#building-the-coreroot)
+Иногда полезно иметь возможность вручную пересобрать конкретный тест или запустить компиляцию под отладчиком. Файл, который использовался для запуска компилятора, можно найти в папке `$repo_root\artifacts\tests\coreclr\obj\[windows|linux|osx].x64.[Debug|Release]\Managed`.
 
-### Running library tests
+Для более комплексных сценариев см. _инструкцию по сборке тестов_ и _инструкцию по сборке Core_Root_ в главе [Сборка и запуск тестов](../../../testing/coreclr/testing).
 
-Build library tests by passing the `libs.tests` subset together with the `/p:TestNativeAot=true` to build the libraries, i.e. `clr.aot+libs+libs.tests /p:TestNativeAot=true` together with the full arguments as specified [above](#building). Then, to run a specific library, go to the tests directory of the library and run the usual command to run tests for the library (see [Running tests for a single library](/docs/workflow/testing/libraries/testing.md#running-tests-for-a-single-library)) but add the `/p:TestNativeAot=true` and the build configuration that was used, i.e. `dotnet.cmd build /t:Test /p:TestNativeAot=true -c Release`.
+### Запуск тестов библиотек
 
-## Design Documentation
+Соберите тесты библиотек добавив флаги `libs.tests` и `/p:TestNativeAot=true` к скрипту сборки библиотек. Например, выполните `clr.aot+libs+libs.tests /p:TestNativeAot=true` вместе c другими аргументами, как указано в инструкции по сборке выше.
 
-* [ILC Compiler Architecture](/docs/design/coreclr/botr/ilc-architecture.md)
-* [Managed Type System](/docs/design/coreclr/botr/managed-type-system.md)
+Чтобы запустить конкретную библиотеку, перейдите в директорию тестов библиотеки и выполните обычную команду для запуска тестов библиотеки (см. [Запуск тестов для одной библиотеки](../../../testing/libraries/testing/)). Также нужно добавить `/p:TestNativeAot=true` и указать конфигурацию сборки. Например, `dotnet.cmd build /t:Test /p:TestNativeAot=true -c Release`.
 
-## Native Sanitizers
+## Дизайн-документация
 
-Using native sanitizers with NativeAOT requires additional care compared to using them with CoreCLR. In addition to passing the `-fsanitize` flag to the command that builds NativeAOT, you must also pass the `EnableNativeSanitizers` MSBuild property to any commands that build projects with a sanitized NativeAOT build to ensure that any sanitizer runtimes are correctly linked with the project.
+-   [Архитектура компилятора ILC](../../../../design/coreclr/botr/ilc-architecture/)
+-   [Типовая система](../../../../design/coreclr/botr/managed-type-system.md)
 
-## Further Reading
+## Нативные санитайзеры
 
-If you want to know more about working with _NativeAOT_ in general, you can check out their [more in-depth docs](/src/coreclr/nativeaot/docs/README.md) in the `src/coreclr/nativeaot` subtree.
+Работа с нативными санитайзерами NativeAOT похожа на работу с санитайзерами CoreCLR, но требует дополнительных действий. В команду сборки NativeAOT необходимо добавить флаг `-fsanitize`. После использования этого флага необходимо также передавать свойство MSBuild `EnableNativeSanitizers` к любым командам сборки для того, чтобы санитайзеры были связан с проектом правильно.
+
+## Дополнительно
+
+Если вы хотите узнать больше о работе с NativeAOT, вы можете ознакомиться с документацией в папке `/src/coreclr/nativeaot/docs/README.md`.

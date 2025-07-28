@@ -1,54 +1,39 @@
-# Requirements to Set Up the Build Environment on Linux
+# Требования для Linux
 
-- [Using your Linux Environment](#using-your-linux-environment)
-  - [Debian/Ubuntu](#debian/ubuntu)
-    - [CMake on Older Versions of Ubuntu and Debian](#cmake-on-older-versions-of-ubuntu-and-debian)
-    - [Clang for WASM](#clang-for-wasm)
-    - [Additional Tools for Cross Building](#additional-tools-for-cross-building)
-  - [Fedora](#fedora)
-  - [Gentoo](#gentoo)
-- [Using Docker](#using-docker)
+Существует два способа сборки репозитория runtime на Linux: настроить свою среду на машине с Linux или использовать образы Docker, которые применяются в официальных сборках. Инструкции ниже расписывают оба подхода. Использование Docker позволяет вам воспользоваться предоставленными образами, которые уже имеют настроенную среду, в то время как использование вашей собственной среды предоставляет большую гибкость в наличии других инструментов, которые могут вам понадобиться.
 
-There are two ways to build the runtime repo on *Linux*: Set up your environment in your Linux machine, or use the Docker images that are used in the official builds. This guide will cover both of these approaches. Using Docker allows you to leverage our existing images which already have an environment set up, while using your own environment grants you better flexibility on having other tools at hand you might need.
+**ПРИМЕЧАНИЕ**: Если вы используете WSL, следуйте инструкциям для дистрибутива, который у вас установлен.
 
-**NOTE:** If you're using WSL, then follow the instructions for the distro you have installed there.
+## Использование вашей среды Linux
 
-## Using your Linux Environment
+Разделы ниже описывают требования для разных дистрибутивов Linux. Минимально необходимый объем оперативной памяти составляет 1 ГБ (сборки, как известно, завершаются неудачей на виртуальных машинах с [512 МБ](https://github.com/dotnet/runtime/issues/4069)). Рекомендуется использовать оперативы побольше, чтобы значительно сократить время сборки.
 
-The following sections describe the requirements for different kinds of Linux distros. Pull Requests are welcome to add documentation regarding environments and distros currently not described here.
-
-The minimum required RAM is 1GB (builds are known to fail on 512MB VM's (https://github.com/dotnet/runtime/issues/4069), although more is recommended, as the builds can take a long time otherwise.
-
-To get started, you can use this helper script to install dependencies on some platforms, or you can install them yourself following the instructions in the next sections. If you opt to try this script, make sure to run it as `sudo` if you don't have root privileges:
+Чтобы начать, вы можете использовать вспомогательный скрипт для установки зависимостей. Или вы можете установить их самостоятельно, следуя инструкциям ниже. Если вы решите попробовать этот скрипт, убедитесь, что вы запускаете его с правами `sudo`:
 
 ```bash
 sudo eng/install-native-dependencies.sh
 ```
 
-Note that it is always a good idea to manually double check that all the dependencies were installed correctly if you opt to use the script.
+После использование скрипта рекомендуется перепроверить, что все зависимости были установлены корректно.
 
 ### Debian/Ubuntu
 
-These instructions are written assuming the current *Ubuntu LTS*.
+Зависимости представлены для версии _Ubuntu LTS_. Ниже перечислены пакеты, которые вам необходимо установить:
 
-The packages you need to install are shown in the following list:
-
-- `CMake` (version 3.20 or newer)
-- `llvm`
-- `lld`
-- `Clang` (see the [Clang for WASM](#clang-for-wasm) section if you plan on doing work on *Web Assembly (Wasm)*)
-- `build-essential`
-- `python-is-python3`
-- `curl`
-- `git`
-- `lldb`
-- `libicu-dev`
-- `liblttng-ust-dev`
-- `libssl-dev`
-- `libkrb5-dev`
-- `ninja-build` (Optional. Enables building native code using `ninja` instead of `make`)
-
-**NOTE:** If you are running on *Ubuntu* older than version *22.04 LTS*, or *Debian* older than version 12, then don't install `cmake` using `apt` directly. Follow the instructions in the [CMake on Older Versions of Ubuntu and Debian section](#cmake-on-older-versions-of-ubuntu-and-debian) later down in this doc.
+-   `CMake` (версии 3.20 и выше)
+-   `llvm`
+-   `lld`
+-   `Clang` (см. [Clang для WASM](#clang-for-wasm), если вы планируете работать с _Web Assembly (Wasm)_)
+-   `build-essential`
+-   `python-is-python3`
+-   `curl`
+-   `git`
+-   `lldb`
+-   `libicu-dev`
+-   `liblttng-ust-dev`
+-   `libssl-dev`
+-   `libkrb5-dev`
+-   `ninja-build` (Установка опциональна. Позволяет собирать нативный код с использованием `ninja` вместо `make`)
 
 ```bash
 sudo apt install -y cmake llvm lld clang build-essential \
@@ -56,21 +41,23 @@ sudo apt install -y cmake llvm lld clang build-essential \
   libssl-dev libkrb5-dev ninja-build
 ```
 
-#### CMake on Older Versions of Ubuntu and Debian
+**ПРИМЕЧАНИЕ**: Если вы используете _Ubuntu_ версии старше _22.04 LTS_ или _Debian_ версии старше 12, не устанавливайте `cmake` напрямую с помощью `apt`. Следуйте инструкциям _CMake на старых версиях Ubuntu и Debian_.
 
-As of now, Ubuntu's `apt` only has until *CMake* version 3.16.3 if you're using *Ubuntu 20.04 LTS* (less in older Ubuntu versions), and version 3.18.4 in *Debian 11* (less in older Debian versions). This is lower than the required 3.20, which in turn makes it incompatible with the runtime repo. To get around this, there are two options you can choose: Use the `snap` package manager, which has a more recent version of *CMake*, or directly use the *Kitware APT Feed*.
+#### CMake на старых версиях Ubuntu и Debian
 
-To use `snap`, run the following command:
+На момент написания документации в `apt` для Ubuntu доступна версия CMake 3.16.3, если вы используете Ubuntu 20.04 LTS, и версия 3.18.4 в Debian 11. Это ниже требуемой версии 3.20, что делает ее несовместимой с репозиторием runtime. Чтобы обойти это ограничение, у вас есть два варианта: использовать менеджер пакетов snap, который имеет более новую версию CMake, или напрямую использовать APT-репозиторий _Kitware_.
+
+Установить cmake через `snap`:
 
 ```bash
 sudo snap install cmake
 ```
 
-To use the *Kitware APT feed*, follow their official instructions [in this link](https://apt.kitware.com/).
+Инструкция по установке через _Kitware_ доступна [по этой ссылке](https://apt.kitware.com/).
 
 #### Clang for WASM
 
-As of now, *WASM* builds have a minimum requirement of `Clang` version 16 or later (version 18 is the latest at the time of writing this doc). If you're using *Ubuntu 22.04 LTS* or older, then you will have to add an additional repository to `apt` to be able to get said version. Run the following commands on your terminal to do this:
+На момент написание документации сборки _WASM_ требуют установку `Clang` версии 16 и выше. Если вы используете _Ubuntu 22.04 LTS_ или более раннюю версию, вам необходимо добавить дополнительный репозиторий в `apt`, чтобы получить указанную версию. Выполните следующие команды в терминале:
 
 ```bash
 sudo add-apt-repository -y "deb http://apt.llvm.org/$(lsb_release -s -c)/ llvm-toolchain-$(lsb_release -s -c)-18 main"
@@ -78,36 +65,34 @@ sudo apt update -y
 sudo apt install -y clang-18
 ```
 
-You can also take a look at the Linux-based *Dockerfile* [over here](/.devcontainer/Dockerfile) for another example.
+Вы также можете использовать Dockerfile на Linux в папке [/.devcontainer/Dockerfile](/.devcontainer/Dockerfile) внутри репозитория.
 
-#### Additional Tools for Cross Building
+#### Дополнительные инструменты для кросс-сборки
 
-If you're planning to use your environment to do Linux cross-building to other architectures (e.g. Arm32, Arm64), and/or other operating systems (e.g. Alpine, FreeBSD), you'll need to install a few additional dependencies. It is worth mentioning these other packages are required to build the `crossrootfs`, which is used to effectively do the cross-compilation, not to build the runtime itself.
+Кросс-сборка в среде системы Linux для других архитектур (например, Arm32 или Arm64) и/или других операционных систем (например, Alpine, FreeBSD) требует установки нескольких дополнительных зависимостей. Эти пакеты необходимы для сборки `crossrootfs`, который используется для эффективной кросс-компиляции, а не для сборки самого времени выполнения.
 
-- `qemu`
-- `qemu-user-static`
-- `binfmt-support`
-- `debootstrap`
+-   `qemu`
+-   `qemu-user-static`
+-   `binfmt-support`
+-   `debootstrap`
 
 ### Fedora
 
-These instructions are written assuming *Fedora 40*.
+Зависимости представлены для _Fedora 40_. Установите следующие пакеты из списка:
 
-Install the following packages for the toolchain:
-
-- `cmake`
-- `llvm`
-- `lld`
-- `lldb`
-- `clang`
-- `python`
-- `curl`
-- `git`
-- `libicu-devel`
-- `openssl-devel`
-- `krb5-devel`
-- `lttng-ust-devel`
-- `ninja-build` (Optional. Enables building native code using `ninja` instead of `make`)
+-   `cmake`
+-   `llvm`
+-   `lld`
+-   `lldb`
+-   `clang`
+-   `python`
+-   `curl`
+-   `git`
+-   `libicu-devel`
+-   `openssl-devel`
+-   `krb5-devel`
+-   `lttng-ust-devel`
+-   `ninja-build` (Установка опциональна. Позволяет собирать нативный код с использованием `ninja` вместо `make`)
 
 ```bash
 sudo dnf install -y cmake llvm lld lldb clang python curl git \
@@ -116,14 +101,14 @@ sudo dnf install -y cmake llvm lld lldb clang python curl git \
 
 ### Gentoo
 
-In case you have Gentoo you can run following command:
+Если у вас Gentoo, вы можете выполнить следующую команду:
 
 ```bash
 emerge --ask clang dev-util/lttng-ust app-crypt/mit-krb5
 ```
 
-## Using Docker
+## Использование Docker
 
-As mentioned at the beginning of this doc, the other method to build the runtime repo for Linux is to use the prebuilt Docker images that our official builds use. In order to be able to run them, you first need to download and install the Docker Engine. The binaries needed and installation instructions can be found at the Docker official site [in this link](https://docs.docker.com/get-started/get-docker).
+Альтернативным способом сборки репозитория на Linux является использование официальных образов Docker. Чтобы начать использовать Docker, необходимо скачать и установить Docker Engine. Файлы установки и инструкции доступны на [официальном сайте Docker](https://docs.docker.com/get-started/get-docker).
 
-Once you have the Docker Engine up and running, you can follow our docker building instructions [over here](/docs/workflow/using-docker.md).
+После того как Docker Engine установлен, следуйте [инструкции по сборке с использованием Docker](../using-docker.md).

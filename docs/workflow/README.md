@@ -1,162 +1,152 @@
-# Workflow Guide
+# Инструкция по работе с репозиторием
 
-- [Introduction](#introduction)
-- [Important Concepts to Understand](#important-concepts-to-understand)
-  - [Build Configurations](#build-configurations)
-- [Building the Repo](#building-the-repo)
-  - [General Overview](#general-overview)
-  - [Get Started on your Platform and Components](#get-started-on-your-platform-and-components)
-  - [General Recommendations](#general-recommendations)
-- [Testing the Repo](#testing-the-repo)
-  - [Performance Analysis](#performance-analysis)
-- [Warnings as Errors](#warnings-as-errors)
-- [Submitting a PR](#submitting-a-pr)
-- [Triaging Errors in CI](#triaging-errors-in-ci)
+## Введение
 
-## Introduction
+Платформа VitaCore работает на Windows, Linux, macOS и FreeBSD. Каждая операционная система имеет свои требования для корректной работы. Обратите внимание, что не все архитектуры поддерживаются для разработки. Однако сами сборки могут быть ориентированы на более широкий спектр систем, чем те, которые были упомянуты ранее. То есть имеются два типа систем, которые одновременно задействованы всякий раз, когда вы работаете со сборками в репозитории платформы:
 
-The runtime repo can be worked with on Windows, Linux, macOS, and FreeBSD. Each platform has its own specific requirements to work properly, and not all architectures are supported for dev work. That said, the builds can target a wider range of platforms beyond the ones mentioned earlier. You can see it as there are always two platforms at play whenever you are working with builds in the runtime repo:
+-   **Система сборки** : Это машина, на которой вы клонировали репозиторий платформы VitaCore и на которой работают все ваши инструменты сборки. В таблице ниже показаны поддерживаемые комбинации операционных систем и архитектур, а также ссылки на документацию с требованиями для каждой операционной системы. Если вы используете WSL напрямую (т. е. не через Docker), то следуйте документации с требованиями для Linux.
 
-- **The Build Platform:** This is the platform of the machine where you cloned the runtime repo and therefore where all your build tools are running on. The following table shows the OS and architecture combinations that we currently support, as well as links to each OS's requirements doc. If you are using WSL directly (i.e. not Docker), then follow the Linux requirements doc.
+| Chip  |                          Windows                           |                         Linux                          |                         macOS                          |                          FreeBSD                           |
+| :---: | :--------------------------------------------------------: | :----------------------------------------------------: | :----------------------------------------------------: | :--------------------------------------------------------: |
+|  x64  |                          &#x2714;                          |                        &#x2714;                        |                        &#x2714;                        |                          &#x2714;                          |
+|  x86  |                          &#x2714;                          |                                                        |                                                        |                                                            |
+| Arm32 |                                                            |                        &#x2714;                        |                                                        |                                                            |
+| Arm64 |                          &#x2714;                          |                        &#x2714;                        |                        &#x2714;                        |                                                            |
+|       | [Требования Windows](requirements/windows-requirements.md) | [Требования Linux](requirements/linux-requirements.md) | [Требования macOS](requirements/macos-requirements.md) | [Требования FreeBSD](requirements/freebsd-requirements.md) |
 
-| Chip  | Windows  | Linux    | macOS    | FreeBSD  |
-| :---: | :------: | :------: | :------: | :------: |
-| x64   | &#x2714; | &#x2714; | &#x2714; | &#x2714; |
-| x86   | &#x2714; |          |          |          |
-| Arm32 |          | &#x2714; |          |          |
-| Arm64 | &#x2714; | &#x2714; | &#x2714; |          |
-|       | [Requirements](requirements/windows-requirements.md) | [Requirements](requirements/linux-requirements.md) | [Requirements](requirements/macos-requirements.md) | [Requirements](requirements/freebsd-requirements.md)
+-   **Конечная система**: Это машина, для которой вы создаете артефакты. То есть система, на которой вы хотите запускать платформу VitaCore.
 
-- **The Target Platform:** This is the platform you are building the artifacts for, i.e. the platform you intend to run your builds on.
+Система сборки и конечная система могут представлять одну и ту же систему или разные системы. Первый вариант проще, поскольку вы, вероятно, будете работать на одной и той же машине. Работа с разными системами называется _кросс-компиляцией_ (cross-compiling). При кросс-компиляции необходимо следовать различным рабочим процессам для успешного завершения, так как невозможно собрать репозиторий в этих системах напрямую (например, Web Assembly (WASM), Browser, Mobiles). Инструкции по работе с данными процессами будут представлены дальше.
 
-The *Build Platform* and the *Target Platform* can be either the same as or different from each other. The former scenario is straightforward, as you will likely be doing all the work on the same machine. In the latter scenario, the process is called *cross-compiling*. There are certain workflows that require you to follow this process, as it is not possible to build the repo directly on those platforms (e.g., Web Assembly (WASM), Browser, Mobiles). The full instructions on how to work with this are detailed in the building docs later on.
+Имейте в виду, что клонирование полной истории этого репозитория занимает примерно 400-500 МБ сетевого трафика, что приводит к увеличению репозитория до 1-1,5 ГБ. Сборка репозитория может занять примерно 10-20 ГБ места для одной конфигурации ОС в зависимости от собранных частей продукта. Имейте ввиду, что этот размер может увеличиться в будущем.
 
-Additionally, keep in mind that cloning the full history of this repo takes roughly 400-500 MB of network transfer, inflating to a repository that can consume somewhere between 1 to 1.5 GB. A build of the repo can take somewhere between 10 and 20 GB of space for a single OS and Platform configuration depending on the portions of the product built. This might increase over time, so consider this to be a minimum bar for working with this codebase.
+## Компоненты
 
-The runtime repo consists of three major components:
+Платформа состоит из трех основных компонентов:
 
-- The Runtimes (CoreCLR and Mono)
-- The Libraries
-- The Hosts and Installers
+-   Runtimes (CoreCLR и Mono)
+-   Библиотеки
+-   Хосты и установщики
 
-You can run your builds from a regular terminal, from the root of the repository. Sudo and administrator privileges are not needed for this.
+Можно запускать сборки из обычной консоли, из корня репозитория. Sudo и права администратора не требуются.
 
-- For instructions on how to edit code and make changes, see [Editing and Debugging](/docs/workflow/editing-and-debugging.md).
-- For instructions on how to debug CoreCLR, see [Debugging CoreCLR](/docs/workflow/debugging/coreclr/debugging-runtime.md).
-- For instructions on using GitHub Codespaces, see [Codespaces](/docs/workflow/Codespaces.md).
+-   Для инструкций по редактированию кода и внесению изменений см. [Редактирование и отладка](editing-and-debugging.md).
+-   Для инструкций по отладке CoreCLR см. [Отладка CoreCLR](debugging/coreclr/debugging-runtime.md).
+-   Для инструкций по использованию GitHub Codespaces см. [Использование Codespaces](Codespaces.md).
 
-## Important Concepts to Understand
+## Терминология и концепты
 
-The following sections describe some important terminology to keep in mind while working with runtime repo builds. For more information, and a complete list of acronyms and their meanings, check out the glossary [over here](/docs/project/glossary.md).
+Ниже описана важная терминология, с которой следует ознакомиться перед тем, как начать работать с платформой. Для получения дополнительной информации и полного списка сокращений и их значений обратитесь к глоссарию [по этой ссылке](/docs/project/glossary.md).
 
-### Build Configurations
+### Конфигурации сборки
 
-To work with the runtime repo, there are three supported configurations (one is *CoreCLR* exclusive) that define how your build will behave:
+Для работы с репозиторием поддерживаются три конфигурации, которые определяют, как будет вести себя ваша сборка:
 
-- **Debug**: Non-optimized code. Asserts are enabled. This configuration runs the slowest. As its name suggests, it provides the best experience for debugging the product.
-- **Checked** *(CoreCLR runtime exclusive)*: Optimized code. Asserts are enabled.
-- **Release**: Optimized code. Asserts are disabled. Runs at the best speed, and is most suitable for performance profiling. This will impact the debugging experience however, due to compiler optimizations that make understanding what the debugger shows difficult, relative to the source code.
+-   **Debug**: Неоптимизированный код. Утверждения (asserts) включены. Эта конфигурация работает медленнее всего. Обеспечивает лучший опыт для отладки продукта.
+-   **Checked** (эксклюзивно для CoreCLR): Оптимизированный код. Утверждения включены.
+-   **Release**: Оптимизированный код. Утверждения выключены. Эта конфигурация обеспечивает максимальную производительность, но может затруднить процесс отладки из-за оптимизации компилятора.
 
-### Build Components
+### Компоненты сборки
 
-- **Runtime**: The execution engine for managed code. There are two different implementations, both written in C or C++:
-  - *CoreCLR*: The comprehensive execution engine originally born from .NET Framework. Its source code lives under the [src/coreclr](/src/coreclr) subtree.
-  - *Mono*: A slimmer runtime than CoreCLR, originally born open-source to bring .NET and C# support to non-Windows platforms. Due to its lightweight nature, it is less affected in terms of speed when working with the *Debug* configuration. Its source code lives under the [src/mono](/src/mono) subtree.
+-   **Runtime**: Среда выполнения для управляемого кода. Существуют две различные реализации, написанные на C или C++:
 
-- **CoreLib** *(also known as System.Private.CoreLib)*: The lowest level managed library. It is directly related to the runtime, which means it must be built in the matching configuration (e.g. Building a *Debug* runtime means *CoreLib* must also be in *Debug*). The `clr` subset includes both, the *Runtime* and the *CoreLib* components, so you usually don't have to worry about that. There are, however, some special cases where you might need to build the components separately. The runtime agnostic code for this library can be found at [src/libraries/System.Private.CoreLib/src](/src/libraries/System.Private.CoreLib/src/README.md).
+    -   _CoreCLR_: Комплексный движок, который изначально появился из .NET Framework. Его исходный код находится в папке [src/coreclr](https://github.com/vitacore-company/runtime/tree/main/src/coreclr).
+    -   _Mono_: Среда выполнения, которая легче чем CoreCLR. Изначально Mono появился как открытый исходный код для поддержки .NET и C# на не-Windows системах. Благодаря легковесности работает без замедлений и с конфигурацией _Debug_. Исходный код находится в папке [src/mono](https://github.com/vitacore-company/runtime/tree/main/src/mono).
 
-- **Libraries**: The bulk of dll's providing the rest of the functionality to the runtime. The libraries can be built in their own configuration, regardless of which one the runtime is using. Their source code lives under the [src/libraries](/src/libraries) subtree.
+-   **CoreLib** _(aka System.Private.CoreLib)_: Наименее управляемая библиотека. Она напрямую связана с runtime, поэтому также должна быть собрана в соответствующей конфигурации (например, сборка _Debug_ runtime означает, что CoreLib также должна быть с конфигурацией _Debug_). Подмножество `clr` (_subset clr_) включает включает в себя как Runtime, так и CoreLib компоненты, поэтому волноваться о работе с одинаковыми конфигурациями не стоит. Однако стоит обратить внимание на особые случаи, когда когда вам может потребоваться собрать компоненты отдельно. Код библиотеки, который не зависит от runtime, можно найти в [src/libraries/System.Private.CoreLib/src](https://github.com/vitacore-company/runtime/tree/main/src/libraries/System.Private.CoreLib/src/README.md).
 
-## Building the Repo
+-   **Библиотеки** (_Libraries_): Группа DLL-файлов, которая обеспечивают дополнительную функциональность runtime. Библиотеки можно собирать в собственной конфигурации, независимо от того, какая конфигурация используется в runtime. Их исходный код находится в папке [src/libraries](https://github.com/vitacore-company/runtime/tree/main/src/libraries).
 
-The main script that will be in charge of most of the building you might want to do is the `build.sh`, or `build.cmd` on Windows, located at the root of the repo. This script receives as arguments the subset(s) you might want to build, as well as multiple parameters to configure your build, such as the configuration, target operating system, target architecture, and so on.
+## Сборка репозитория
 
-**NOTE:** If you plan on using Docker to work on the runtime repo, read [this doc](/docs/workflow/using-docker.md) first. It explains how to set up, as well as the images and containers to prepare you to follow the building and testing instructions in the next sections.
+Основной скрипт, который отвечает за большинство билдов — это `build.sh` (или `build.cmd` на Windows), который находится в корневой папке репозитория. Этот скрипт принимает в качестве аргументов подмножества, которые вам могут быть необходимы для сборки. Кроме того, для сборки необходимо указывать и другие параметры, такие как конфигурация, конечная система, архитектура конечной системы и т.д.
 
-### General Overview
+**Примечание:** Если вы планируете использовать Docker для работы с репозиторием, ознакомьтесь сначала с документацией [по этой ссылке](using-docker.md).
 
-Running the script (`build.sh`/`build.cmd`) with no arguments will build the whole repo in *Debug* configuration, for the OS and architecture of your machine. A typical dev workflow only one or two components at a time, so it is more efficient to just build those. This is done by means of the `-subset` flag. For example, for CoreCLR, it would be:
+### Основная информация
+
+Запуск скрипта сборки (`build.sh`/`build.cmd`) без аргументов соберет весь репозиторий в конфигурации _Debug_ для ОС и архитектуры вашей машины. Обычный процесс разработки требует сборки только одного или двух компонентов. Для этого используйте флаг `-subset`. Например, для сборки CoreCLR используйте:
 
 ```bash
 ./build.sh -subset clr
 ```
 
-The main subset values are:
+Основные значение флага subset:
 
-- `Clr`: The full CoreCLR runtime, which consists of the runtime itself and the CoreLib components.
-- `Libs`: All the libraries components, excluding their tests. This includes the libraries' native parts, refs, source assemblies, and their packages and test infrastructure.
-- `Packs`: The shared framework packs, archives, bundles, installers, and the framework pack tests.
-- `Host`: The .NET hosts, packages, hosting libraries, and their tests.
-- `Mono`: The Mono runtime and its CoreLib.
+-   `Clr`: Сборка самого CoreCLR и компонентов CoreLib.
+-   `Libs`: Все компоненты библиотек, за исключением тестов. Включает в себя native-части библиотек, refs, исходные сборки и их пакеты, а также тестовую инфраструктуру.
+-   `Packs`: Общие пакеты фреймворка, архивы, пакеты, установщики и тесты фреймворка.
+-   `Host`: Хосты .NET, пакеты, библиотеки хостинга и их тесты.
+-   `Mono`: Сборка Mono и компонентов CoreLib.
 
-Some subsets are subsequently divided into smaller pieces, giving you more flexibility as to what to build/rebuild depending on what you're working on. For a full list of all the supported subsets, run the build script, passing `help` as the argument to the `subset` flag.
+Некоторые подмножества поделены части поменьше, что дает гибкость над процессами с которыми вы работаете при сборке/пересборке. Для получения полного списка всех поддерживаемых подмножеств выполните скрипт сборки, передав `help` в качестве аргумента для флага `subset`.
 
-It is also possible to build more than one subset under the same command-line. In order to do this, you have to link them together with a `+` sign in the value you're passing to `-subset`. For example, to build both, CoreCLR and Libraries in Release configuration, the command-line would look like this:
+Также возможно собрать более одного подмножества в одной командной строке. Для этого необходимо связать их вместе с помощью знака `+` в значении, которое вы передаете параметру `-subset`. Например, чтобы собрать как `CoreCLR`, так и `Libraries` в конфигурации _Release_, командная строка будет выглядеть следующим образом:
 
 ```bash
 ./build.sh -subset clr+libs -configuration Release
 ```
 
-If you require to use different configurations for different subsets, there are some specific flags you can use:
+Если вам необходимо использовать иную конфигурацию для других подмножеств, вы можете использовать данные флаги:
 
-- `-runtimeConfiguration (-rc)`: The CoreCLR build configuration
-- `-librariesConfiguration (-lc)`: The Libraries build configuration
-- `-hostConfiguration (-hc)`: The Host build configuration
+-   `-runtimeConfiguration (-rc)`: Конфигурация сборки CoreCLR
+-   `-librariesConfiguration (-lc)`: Конфигурация сборки Библиотек
+-   `-hostConfiguration (-hc)`: Конфигурация сборки хоста
 
-The behavior of the script is that the general configuration flag `-c` affects all subsets that have not been qualified with a more specific flag, as well as the subsets that don't have a specific flag supported, like `packs`. For example, the following command-line would build the libraries in *Release* mode and the runtime in *Debug* mode:
+Поведение скрипта определяется основным флагом конфигурации `-c`. Этот флаг влияет на все подмножества, которые не были включены при помощи соответствующих флагов, а также на подмножества, для которых не поддерживается конкретный флаг (таких как `packs`). Например, следующая командная строка соберет библиотеки в режиме _Release_ и runtime в режиме _Debug_:
 
 ```bash
 ./build.sh -subset clr+libs -configuration Release -runtimeConfiguration Debug
 ```
 
-In this example, the `-lc` flag was not specified, so `-c` qualifies `libs`. In the first example, only `-c` was passed, so it qualifies both, `clr` and `libs`.
+В данном примере флаг `-lc` не был указан, поэтому флаг `-c` указывает `libs`. В первом примере был передан только флаг `-c`, поэтому он указывает как `clr`, так и `libs`.
 
-As an extra note here, if your first argument to the build script are the subsets, you can omit the `-subset` flag altogether. Additionally, several of the supported flags also include a shorthand version (e.g. `-c` for `-configuration`). Run the script with `-h` or `-help` to get an extensive overview on all the supported flags to customize your build, including their shorthand forms, as well as a wider variety of examples.
+Дополнительно стоит отметить, что если ваш первый аргумент к скрипту сборки — это подмножества, вы можете полностью опустить флаг `-subset`. Кроме того, несколько поддерживаемых флагов также имеют сокращенные версии (например, `-c` для `-configuration`). Запустите скрипт с `-h` или `-help`, чтобы получить дополнительную информацию о поддерживаемых флагов для настройки вашей сборки, включая их сокращенные формы и примеры использования.
 
-**NOTE:** On non-Windows systems, the longhand versions of the flags can be passed with either single `-` or double `--` dashes.
+**ПРИМЕЧАНИЕ**: На системах, отличных от Windows, длинные версии флагов могут быть переданы как с одним `-`, так и с двумя `--` дефисами.
 
-### Get Started on your Platform and Components
+### Начало работы c системой и компонентами
 
-Now that you've got the general idea on how to get started, it is important to mention that, while the procedure is very similar among platforms and subsets, each component has its own technicalities and details, as explained in their own specific docs:
+Теперь, когда у вас есть общее представление о том, с чего начать, важно упомянуть, что процесс сборки похожа на разных платформах и подмножествах, однако, каждый компонент имеет свои технические особенности и детали, которые представлены в соответствующих доках:
 
-**Component Specifics:**
+**Специфика компонентов:**
 
-- [CoreCLR](/docs/workflow/building/coreclr/README.md)
-- [Libraries](/docs/workflow/building/libraries/README.md)
-- [Mono](/docs/workflow/building/mono/README.md)
+-   [CoreCLR](building/coreclr/README.md)
+-   [Libraries](building/libraries/README.md)
+-   [Mono](building/mono/README.md)
 
-**NOTE:** *NativeAOT* is part of CoreCLR, but it has its own specifics when it comes to building. We have a separate doc dedicated to it [over here](/docs/workflow/building/coreclr/nativeaot.md).
+**ПРИМЕЧАНИЕ:** _NativeAOT_ является частью CoreCLR, но имеет свои особенности при сборке. Документация доступна [по этой ссылке](building/coreclr/nativeaot.md).
 
-### General Recommendations
+### Общие рекомендации
 
-- If you're working with the runtimes, then the usual recommendation is to build everything in *Debug* mode. That said, if you know you won't be debugging the libraries source code but will need them (e.g. for a *Core_Root* build), then building the libraries on *Release* instead will provide a more productive experience.
-- The counterpart to the previous point: When you are working in libraries. In this case, it is recommended to build the runtime on *Release* and the libraries on *Debug*.
-- If you're working on *CoreLib*, then you probably want to try to get the job done with a *Release* runtime, and fall back to *Debug* if you need to.
+-   При работе с runtime рекомендуется собирать все в режиме _Debug_. Тем не менее, если вам не нужно отлаживать исходный код библиотек, но они вам понадобятся (напр., для сборки _Core_Root_), то сборка библиотек в режиме _Release_ обеспечит большую продуктивность.
+-   И наоборот, если вам необходимо работать с библиотеками — рекомендуется собирать runtime в режиме _Release_, а библиотеки в режиме _Debug_.
+-   При работе с _CoreLib_, рекомендуется выполнять задачи с помощью _Release_ версии runtime, а в случае необходимости перейти на _Debug_.
 
-## Testing the Repo
+## Тестирование репозитория
 
-Building the components of the repo is just part of the experience. The runtime repo also includes vast test suites you can run to ensure your changes work properly as expected and don't inadvertently break something else. Each component has its own methodologies to run their tests, which are explained in their own specific docs:
+Сборка компонентов репозитория — это лишь часть рабочего процесса. Этот репозиторий также включает в себя широкий набор тестов, которые вы можете запустить, чтобы убедиться в правильной работе ваших изменений, а также для выявлении ошибок и сбоев. Каждый компонент имеет свои методологии для запуска тестов, которые представлены в соответствующих доках:
 
-- [CoreCLR](/docs/workflow/testing/coreclr/testing.md)
-  - [NativeAOT](/docs/workflow/building/coreclr/nativeaot.md#running-tests)
-- [Libraries](/docs/workflow/testing/libraries/testing.md)
-- [Mono](/docs/workflow/testing/mono/testing.md)
+-   [CoreCLR](testing/coreclr/testing.md)
+    -   [NativeAOT](building/coreclr/nativeaot.md#running-tests)
+-   [Libraries](testing/libraries/testing.md)
+-   [Mono](testing/mono/testing.md)
 
-### Performance Analysis
+### Анализ производительности
 
-Fixing bugs and adding new features aren't the only things to work on in the runtime repo. We also have to ensure performance is kept as optimal as can be, and that is done through benchmarking and profiling. If you're interested in conducting these kinds of analysis, the following links will show you the usual workflow you can follow:
+Исправление ошибок и добавление новых функций — это не единственные задачи, с которыми нужно работать в этом репозитории. Необходимо также следить за оптимальной производительностью с помощью бенчмаркинга и профилирования. Если вас интересует анализ производительности, ссылки ниже демонстрируют необходимые процессы, которым вы можете следовать:
 
-* [Benchmarking Workflow for dotnet/runtime repository](https://github.com/dotnet/performance/blob/master/docs/benchmarking-workflow-dotnet-runtime.md)
-* [Profiling Workflow for dotnet/runtime repository](https://github.com/dotnet/performance/blob/master/docs/profiling-workflow-dotnet-runtime.md)
+-   [Бенчмаркинг репозитория](https://github.com/dotnet/performance/blob/master/docs/benchmarking-workflow-dotnet-runtime.md)
+-   [Профайлинг репозитория](https://github.com/dotnet/performance/blob/master/docs/profiling-workflow-dotnet-runtime.md)
 
-## Warnings as Errors
+## Предупреждения вместо ошибок
 
-The repo build treats warnings as errors, including many code-style warnings. Dealing with warnings when you're in the middle of making changes can be annoying (e.g. unused variable that you plan to use later). To disable treating warnings as errors, set the `TreatWarningsAsErrors` environment variable to `false` before building. This variable will be respected by both the `build.sh`/`build.cmd` root build scripts and builds done with `dotnet build` or Visual Studio. Some people may prefer setting this environment variable globally in their machine settings.
+Сборка репозитория выдает предупреждения вместо ошибок, включая предупреждения по стилю кода. Выскакивающие предупреждения могут мешать рабочему процессу (например, предупреждения о неиспользуемой переменной, которую вы планируете использовать позже). Чтобы отключить трактовку предупреждений вместо ошибок, установите переменную окружения `TreatWarningsAsErrors` в значение `false` перед сборкой. Эта переменная будет учитываться как в скриптах сборки `build.sh/build.cmd`, так и в сборках, выполненных с помощью `dotnet build` или Visual Studio. Вы также можете установить эту переменную окружения глобально в настройках своего компьютера.
 
-## Submitting a PR
+## Отправка PR
 
-Before submitting a PR, make sure to review the [contribution guidelines](/CONTRIBUTING.md). After you get familiarized with them, please read the [PR guide](/docs/workflow/ci/pr-guide.md) to find more information about tips and conventions around creating a PR, getting it reviewed, and understanding the CI results.
+Перед отправкой Pull Request-ов ознакомьтесь с правилами их оформления в [соответствующей главе](/issues-pr-management). Эта глава также содержит правила оформления коммитов, а также правила работы с PR.
 
-## Triaging Errors in CI
+## Анализ сбоев в CI
 
-Given the size of the runtime repository, flaky tests are expected to some degree. There are a few mechanisms we use to help with the discoverability of widely impacting issues. We also have a regular procedure that ensures issues get properly tracked and prioritized. You can find more information on [triaging failures in CI](/docs/workflow/ci/failure-analysis.md).
+Учитывая размер репозитория, некоторые тесты могут быть нестабильными. Поэтому предоставляются несколько механизмов, чтобы помочь в обнаружении важных проблем. Имеется также и специальный процесс, который обеспечивает отслеживание и правильную приоритизацию возникших проблем. Вы можете найти больше информации в главе [Анализ сбоев CI](ci/failure-analysis.md).
